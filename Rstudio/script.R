@@ -1,0 +1,718 @@
+
+
+
+
+
+# ---- Importation des librairies ----
+install.packages('tseries')
+install.packages('forecast')
+install.packages('ggpubr')
+
+library(zoo)
+library(ggplot2)
+library(tseries)
+library(forecast)
+library(ggpubr)
+library(dplyr)
+
+
+
+# ---- Importation des données ---- 
+
+Dataset = read.table("../Data/Valeurs_mensuelles.csv",
+                     header=FALSE,
+                     sep=";",
+                     quote="\"",
+                     skip=4,
+                     stringsAsFactors=FALSE)
+
+str(Dataset)
+
+# ---- Traitement des Données  ---- 
+
+Dataset %>% select(V1,V2) %>% rename(Date=V1,Valeur=V2) %>%
+  mutate(Date = paste(Date,
+                      "-01",
+                      sep=""),
+         Date = as.Date(Date)) -> Dataset
+Dataset <- Dataset[order(Dataset$Date), ]
+
+
+# ---- GRAPH 1 ---- 
+
+# Création du graphique principal
+graph1 <- ggplot(data = Dataset) +
+  geom_line(aes(x = Date,
+                y = Valeur),
+            size = 1) +
+  scale_x_date(position = "bottom",
+               date_breaks = "2 years",
+               date_minor_breaks = "3 months",
+               date_labels = "%b %Y") +
+  labs(title = "Nuitées en l’hôtellerie en Normandie",
+       subtitle = "Source : INSEE (identifiant 010598624) ",
+       x = "Période : Janvier 2011 à Août 2023",
+       y = "Nombre de nuitées") +
+  theme_minimal() +
+  theme(plot.background = element_rect(fill = "white",color = "white"),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, color = "purple"),
+        axis.title.x = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0, vjust = 1)) +
+  labs(caption = "BUT Science des Données   Auteur: Durand Gabriel")
+
+print(graph1)
+
+# ---- GRAPH 2 ----
+
+graph2 <- ggplot(data = Dataset) +
+  geom_line(aes(x = Date,
+                y = Valeur),
+            size = 1) +
+  geom_smooth( aes(x = Date , y = Valeur),
+               method = "auto",
+               se = FALSE,
+               span =0.3)+
+  scale_x_date(position = "bottom",
+               date_breaks = "2 years",
+               date_minor_breaks = "3 months",
+               date_labels = "%b %Y") +
+  labs(title = "Nuitées en l’hôtellerie en Normandie",
+       subtitle = "Source : INSEE (identifiant 010598624) ",
+       x = "Période :Janvier 2011 à Août 2023",
+       y = "Nombre de nuitées") +
+  theme_minimal() +
+  theme(plot.background = element_rect(fill = "white",color = "white"),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, color = "purple"),
+        axis.title.x = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0, vjust = 1)) +
+  labs(caption = "BUT Science des Données   Auteur: Durand Gabriel")
+
+
+print(graph2)
+
+
+
+# ---- GRAPH 3 ----
+
+model1 <- loess(Valeur ~ as.numeric(as.Date(Date)), data = Dataset, span = 0.3, degree = 1)
+# Prédire la tendance du modèle
+trend <- predict(model1)
+
+# Calculer les variations saisonnières
+varseason <- Dataset$Valeur - trend
+
+# Créer un dataframe pour la visualisation
+varseason_df <- data.frame(Date = as.Date(Dataset$Date), Value = varseason)
+
+custom_breaks_y <- seq(-400, 600, by = 200)
+
+# Tracer le graphique avec le fond blanc, sans grilles, une échelle y augmentée et des breaks personnalisés
+graph3 <- ggplot(data = varseason_df,
+                 aes(x = Date,
+                     y = Value)) +
+  geom_line(color = "black",
+            size = 1,
+            na.rm = TRUE) +
+  geom_smooth(method="loess",
+              color="blue",
+              method.args=list(degree=1),
+              se = FALSE,
+              size = 0)+
+  
+  labs(title = " Variations saisonnieres",
+       subtitle = "Source : INSEE (identifiant 010598624) ",
+       x = "Période : Janvier 2011 à Août 2023", 
+       y = "Nombre de nuitees") +
+  scale_y_continuous(breaks = custom_breaks_y,
+                     limits = c(-600, 600),
+                     expand = c(0, 0)) +
+  scale_x_date(date_breaks = "2 years",
+               date_labels = "%b %Y") +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "white" ,color = "white"),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, color = "purple"),
+        axis.title.x = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0, vjust = 1)) +
+  labs(caption = "BUT Science des Données   Auteur: Durand Gabriel")
+        
+
+print(graph3)
+
+
+
+# ---- GRAPH 4 ----
+
+# Calculer la moyenne mensuelle avec la fonction aggregate
+Mean <- aggregate(Value ~ format(Date, "%m"), data = varseason_df, FUN = mean)
+
+# Renommer les colonnes
+names(Mean) <- c("Mois", "Valeur")
+
+# Séquence de mois
+mois <- format(seq(as.Date("2011-01-01"), as.Date("2023-08-01"), by = "months"), "%b")
+
+# Tracer le graphique des distributions mensuelles sous forme de boxplots parallèles
+ graph4 <- ggplot(data = varseason_df,
+       aes(x = format(Date, "%m"),
+           y = Value)) +
+  geom_boxplot(alpha = 0.7,
+               fill = "lightblue",
+               outlier.colour = "black",
+               outlier.shape = 20,
+               outlier.size = 1) +
+  scale_x_discrete(labels = mois) +
+  geom_point(data = Mean,
+             aes(x = Mois,
+                 y = Valeur),
+             color = "red",
+             size = 1) +
+  geom_line(data = Mean,
+            aes(x = Mois,
+                y = Valeur,
+                group = 1)) +
+  labs(
+    title = "Variations des nuitées selon le mois",
+    subtitle = "Source : INSEE (identifiant 010598624) ",
+    x = "Janvier 2011 à Aout 2023",
+    y = "Nombre de nuitées en milliers"
+  ) +
+  scale_y_continuous(breaks = custom_breaks_y,
+                     limits = c(-600, 600),
+                     expand = c(0, 0)) +
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "white",
+                                    color = "white"),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust = 0.5,
+                              face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5,
+                                 color = "purple"),
+    axis.title.x = element_text(hjust = 0.5),
+    plot.caption = element_text(hjust = 0,
+                                vjust = 1)
+  ) +
+  labs(caption = "BUT Science des Données   Auteur: Durand Gabriel") +
+  guides(color = guide_legend(title = "Moyenne mensuelle",
+                              override.aes = list(alpha = 1)))
+print(graph4)
+# ---- PHASE 4 ---- 
+time = as.numeric(Dataset$Date)
+values = coredata(Dataset$Valeur)
+
+# Lissage initial
+smooth = loess(values ~ time,span = 0.3, degree = 1)
+smoothed_values1 <- predict(smooth,
+                            order_by = Dataset$Date)
+
+# Détermination des points de rupture
+time <- Dataset$Date
+
+t1 <- as.Date("2018-10-01")  # Premier point de rupture
+t2 <- as.Date("2020-12-01")  # Deuxième point de rupture
+
+Ind1 <- time > t1 ; time1 = (time  - t1) * Ind1
+Ind2 <- time > t2 ; time2 = (time  - t2) * Ind2
+
+# Ajustement du modèle de régression avec deux points de rupture
+values <- coredata(smoothed_values1)
+
+model <- lm(values ~ time + time1 + time2)
+summary(model)
+
+Trend = zoo(model$fitted , order.by = Dataset$Date)
+
+
+# ---- GRAPH 5 ----
+data1 <- data.frame(Month = Month_[1:12],Coefficient = coef)
+custom_breaks_y2 <- seq(400, 800, by = 100)
+
+plot_data <- data.frame(time = varseason_df$Date, values = varseason_df$Value,smoothed_values = smoothed_values1)
+
+# Création du graphique
+graph5 <- ggplot(plot_data, aes(x = time, y = values)) +
+  geom_line(aes(y = smoothed_values), size = 0) +  # Courbe lissée
+  geom_line(aes(y = predict(model)),color = "red", size = 0) +  # Régression linéaire par morceaux
+  labs(
+    title = "Comparaison de la courbe lissée avec le modèle de régression linéaire par morceaux",
+    subtitle = "Source : INSEE (identifiant 010598624) ",
+    x = "Janvier 2011 à Aout 2023",
+    y = "Nuitées en milliers"
+  ) +
+  scale_y_continuous(breaks = custom_breaks_y2,
+                     limits = c(300, 800),
+                     expand = c(0, 0)) +
+  scale_x_date(date_breaks = "2 years",
+               date_labels = "%b %Y") +
+  theme_minimal()+
+    theme(panel.background = element_rect(fill = "white" ,color = "white"),
+          panel.grid.minor = element_blank(),
+          plot.title = element_text(hjust = 0.5, face = "bold"),
+          plot.subtitle = element_text(hjust = 0.5, color = "purple"),
+          axis.title.x = element_text(hjust = 0.5),
+          plot.caption = element_text(hjust = 0, vjust = 1)) +
+    labs(caption = "BUT Science des Données   Auteur: Durand Gabriel")
+print(graph5)
+  
+
+# ---- GRAPH 6 ----
+comparison_df <- data.frame(Date = as.Date(Dataset$Date),
+                            Trend = trend,
+                            Regression = predict(model))
+
+graph6 <- ggplot(data = comparison_df, aes(x = Trend, y = Regression)) +
+  geom_point(position =  position_identity(),) +
+  geom_abline(intercept = 0, slope = 1, linetype = "solid", color = "red") +
+  labs(title = "Contrôle de l'adéquation du modèle de régression avec la tendance lissée",
+       subtitle = "Source : INSEE (identifiant 010598624) ",
+       x = "Tendance lissée",
+       y = "Modèle de régression") +
+  theme_minimal() +
+  theme_minimal()+
+  scale_x_continuous(limits = c(400, 800), breaks = seq(400, 800, by = 100)) +
+  scale_y_continuous(limits = c(400, 800), breaks = seq(400, 800, by = 100))+
+  theme(panel.background = element_rect(fill = "white" ,color = "white"),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, color = "purple"),
+        axis.title.x = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0, vjust = 1)) +
+  labs(caption = "BUT Science des Données   Auteur: Durand Gabriel")
+  
+print(graph6)
+
+# ---- GRAPH 7 ----
+
+# Assurez-vous que les paramètres régionaux sont définis pour l'anglais
+Sys.setlocale("LC_TIME", "en_US.UTF-8")
+
+# Création d'un facteur 'Month' avec les niveaux dans le bon ordre
+varseason_df$Month <- factor(format(varseason_df$Date, "%b"), 
+                             levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))
+
+
+# Convertir les données en série temporelle ts avec la fréquence appropriée
+ts_data <- ts(varseason_df$Value, frequency = 12, start = c(2011, 01))
+
+# Appliquer la décomposition STL
+stl_decomposed <- stl(ts_data, s.window = "periodic")
+
+# Extraire et traiter la composante saisonnière
+seasonal_component <- as.numeric(stl_decomposed$time.series[, "seasonal"])
+summary(seasonal_component)
+# Calculer les coefficients saisonniers moyens pour chaque période
+monthly_coefficients <- colMeans(matrix(seasonal_component, ncol = 12, byrow = TRUE))
+
+# Créer un DataFrame pour les coefficients saisonniers
+coefficients_df <- data.frame(Month = month.abb, Coefficient = monthly_coefficients)
+
+# Convertir `Month` en facteur avec les niveaux dans l'ordre approprié
+coefficients_df$Month <- factor(coefficients_df$Month, levels = month.abb)
+
+# Création du graphique
+graph7 <- ggplot(data = coefficients_df, aes(x = Month, y = Coefficient)) +
+  geom_line(color = "blue", group = 1, size = 1) +  # Ligne bleue reliant les points
+  geom_point(color = "black", fill = "yellow", shape = 21, size = 3) +  # Points jaunes pour les coefficients
+  geom_hline(yintercept = 0, linetype = "solid", color = "black") +  # Ligne horizontale à y = 0
+  geom_text(aes(label = sprintf("%.0f", Coefficient)), vjust = -0.5, hjust = 1.3) +  # Texte décalé à gauche
+  labs(title = "Visualisation des coefficients saisonniers définitifs",
+       subtitle = "Source : INSEE (identifiant 010598624) ",
+       x = "Mois",
+       y = "Coefficient saisonnier") +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "white", color = "white"),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, color = "purple"),
+        axis.title.x = element_text(hjust = 0.5),
+        axis.title.y = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0, vjust = 1)) +
+  labs(caption = "BUT Science des Données   Auteur: Lesueur Romain")
+# Afficher le graphique
+print(graph7)
+
+# ---- GRAPH 8 ----
+# Convertir les données en série temporelle ts avec la fréquence appropriée
+ts_data <- ts(varseason_df$Value, frequency = 12, start = c(2011, 1))
+
+# Appliquer la décomposition STL
+stl_decomposed <- stl(ts_data, s.window = "periodic")
+
+# Extraire et traiter la composante saisonnière
+seasonal_component <- as.numeric(stl_decomposed$time.series[, "seasonal"])
+
+# Calculer les variations saisonnières (valeurs originales - composante de tendance)
+seasonal_variation <- ts_data - stl_decomposed$time.series[, "trend"]
+
+# Créer un DataFrame pour le graphique
+data_for_plot <- data.frame(
+  Coefficients = seasonal_component, 
+  Variations = as.numeric(seasonal_variation),
+  Date = as.Date(time(ts_data))
+)
+
+# Calculer la régression linéaire
+model <- lm(Variations ~ Coefficients, data = data_for_plot)
+
+# Ajouter les résidus au DataFrame
+data_for_plot$Residuals <- residuals(model)
+
+# Identifier les outliers
+threshold <- 3 * sd(data_for_plot$Residuals)
+data_for_plot$Outlier <- abs(data_for_plot$Residuals) > threshold
+
+# Créer le graphique
+graph8 <- ggplot(data_for_plot, aes(x = Coefficients, y = Variations)) +
+  geom_point(aes(color = Outlier), alpha = 0.5,color = "black") +  # Colorer différemment les outliers
+  geom_smooth(method = lm, se = FALSE,color = "red") +  # Ajouter une ligne de tendance
+  geom_text(data = subset(data_for_plot, Outlier), aes(label = format(Date, "%b-%Y")), 
+            hjust = 1.5, vjust = 1.5, check_overlap = TRUE) +  # Étiqueter les outliers avec la date
+  labs(title = "Visualisation de l'adéquation entre les variations saisonnières et les coefficients saisonniers",
+       subtitle = "Source : INSEE (identifiant 010598624) ",
+       x = "Coefficients saisonniers définitifs",
+       y = "Variations saisonnières",
+       caption = "BUT Science des Données   Auteur: Lesueur Romain") +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "white", color = "white"),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, color = "purple"),
+        axis.title.x = element_text(hjust = 0.5),
+        axis.title.y = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0, vjust = 1)) +
+  labs(caption = "BUT Science des Données   Auteur: Lesueur Romain")
+
+# Afficher le graphique
+print(graph8)
+
+
+
+#---- GRAPH 9 A CORRIGER ----
+varseason_ = Dataset$Valeur - Trend
+month_ = format(seq(as.Date("2011-01-01"), as.Date("2023-09-01"), by = "months"), "%b")
+Month_ = rep(month_)
+Month_ = factor(Month_,levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+                                  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))
+model2 = lm(coredata(varseason_) ~ -1+ Month_)
+model2 = lm(coredata(varseason_) ~ -1 + Month_,
+            contrasts = list(Month_ = contr.treatment))
+coef = coef(model2)-mean(coef(model2))
+Data2 = data.frame(Date =  Month_, Varseason = varseason_ )
+Data2$Année <- format(Dataset$Date,"%Y")
+Data3 = merge(Data2 , data1 , by.x = "Date",by.y='Month',all.x =TRUE )
+
+defseason = coef
+season = zoo(defseason,
+             order.by = index(varseason_))
+adjusted = Trend + season
+Data3 = Data3 %>% arrange(Date,Année)
+
+Dataset2 <- Dataset %>% 
+  mutate(Année = format(Date, "%Y"),
+         Mois = format(Date, "%b"))
+
+Dataset2 <- Dataset2 %>%  arrange(Mois)
+Dataset2$Mois <- factor(Dataset2$Mois,
+                   levels = c("Janv", "Fevr", "Mars", "Avr", "Mai", "Juin", 
+                              "Juil", "Aout", "Sept", "Oct", "Nov", "Dec"))
+Dataset2 <- Dataset2[order(Dataset2$Mois),]
+Data3$Brutes = Dataset2$Valeur
+Data3 = Data3 %>% arrange(Année)
+Data3$Ajuste = adjusted
+
+fit <-lm( Brutes ~ Ajuste, data = Data3)
+
+
+equation <- sprintf("y = %.2f + %.2fx", coef(fit)[1],coef(fit)[2])
+
+rsquared <- sprintf(" | R = %.4f", summary(fit)$r.squared)
+
+
+graph9 <- ggplot(Data3, aes(x = Ajuste,y = Brutes))+
+  geom_point(size = 0.3) +
+  geom_smooth(method = "lm",
+              se = FALSE,
+              color = 'red',
+              size = 0.4)+
+  geom_text(data = Data3[Data3$Ajuste > 350 & Data3$Brutes < 175,],
+            aes(x = Ajuste , y = Brutes, label = paste(Date, Année)),
+              color = "blue", size = 3, hjust = 0, vjust = -0.6) +
+  geom_text(aes(x = max (Data2$Ajuste), y = min(Data2$Brutes), label = paste(equation)),
+        color = "black", size = 4, hjust = 1, vjust = -2) +
+  labs(title = "visualisation de l'adéquation entre les valeurs ajustées et les valeurs ajustées et les valeurs Brutes",
+      subtitle = "Source: INSEE (Identifiant : 010598624)",
+      X = "valeurs ajustées",
+      y = "valeurs brutes") +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "white", color = "white"),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, color = "purple"),
+        axis.title.x = element_text(hjust = 0.5),
+        axis.title.y = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0, vjust = 1)) +
+  labs(caption = "BUT Science des Données   Auteur: Lesueur Romain")
+
+
+print(graph9)
+
+# ---- GRAPH 10----
+# Assurez-vous que la colonne 'Date' dans 'varseason_df' est bien de type Date
+varseason_df$Date <- as.Date(varseason_df$Date)
+
+# Ajustement du modèle linéaire
+model <- lm(Value ~ Month, data = varseason_df)
+
+# Ajout des résidus standardisés à varseason_df pour la visualisation
+varseason_df$Std_Residuals <- rstandard(model)
+
+# Calcul de l'IQR des résidus standardisés
+iqr_value <- IQR(varseason_df$Std_Residuals)
+
+# Calcul des seuils pour les lignes horizontales (1.5 * IQR au-dessus et en dessous du Q1 et Q3)
+iqr_upper <- quantile(varseason_df$Std_Residuals, 0.75) + 1.9 * iqr_value
+iqr_lower <- quantile(varseason_df$Std_Residuals, 0.25) - 2.15 * iqr_value
+
+# Création du graphique de résidus standardisés
+graph10 <- ggplot(varseason_df, aes(x = Date, y = Std_Residuals)) +
+  geom_line() +  # Tracé des résidus standardisés
+  geom_smooth(color = "red", se = FALSE) +  # Ajouter une ligne de tendance
+  geom_hline(yintercept = iqr_upper, linetype = "dashed", color = "blue") +  # Ligne horizontale pour l'IQR supérieur avec des petits tirets
+  geom_hline(yintercept = iqr_lower, linetype = "dashed", color = "blue") +  # Ligne horizontale pour l'IQR inférieur avec des petits tirets
+  labs(title = "Visualisation des résidus standardisés",
+       subtitle = "Source : INSEE (identifiant 010598624)",
+       x = "Date",
+       y = "Résidus standardisés",
+       caption = "BUT Science des Données   Auteur: Lesueur Romain") +
+  scale_x_date(date_breaks = "2 years",
+               date_labels = "%b %Y") +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "white", color = "white"),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, color = "purple"),
+        axis.title.x = element_text(hjust = 0.5),
+        axis.title.y = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0, vjust = 1)) +
+    labs(caption = "BUT Science des Données   Auteur: Lesueur Romain")
+
+# Affichage du graphique
+print(graph10)
+
+# ---- GRAPH 11 ----
+
+# Création du graphique de densité des résidus standardisés
+graph11 <- ggplot(varseason_df, aes(x = Std_Residuals)) +
+  geom_density(fill = "blue", alpha = 0.4) +  # Densité avec remplissage bleu
+  geom_rug() +  # Ajout des marques de tapis pour montrer la distribution des résidus
+  labs(title = "Visualisation de la distribution des résidus standardisés",
+       subtitle = "Source : INSEE (identifiant 010598624)",
+       x = "Résidus standardisés",
+       y = "Densité",
+       caption = "BUT Science des Données   Auteur: Lesueur Romain") +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "white", color = "white"),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, color = "purple"),
+        axis.title.x = element_text(hjust = 0.5),
+        axis.title.y = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0, vjust = 1)) +
+  labs(caption = "BUT Science des Données   Auteur: Lesueur Romain")
+
+# Affichage du graphique
+print(graph11)
+
+# ---- GRAPH 12 ----  
+
+
+model <- lm(Value ~ Month, data = varseason_df)
+#Calculer les résidus standardisés
+varseason_df$Std_Residuals <- rstandard(model)
+
+#Identifier les valeurs atypiques basées sur une certaine métrique, par exemple 2 écarts-types
+seuil <- 2
+varseason_df$Outlier <- abs(varseason_df$Std_Residuals) > seuil
+
+
+# Filtrer les données atypiques (outliers)
+filtered_data <- varseason_df[!varseason_df$Outlier, ]
+
+# Création du graphique de densité des résidus standardisés sans les données atypiques
+graph12 <- ggplot(filtered_data, aes(x = Std_Residuals)) +
+  geom_density(fill = "blue", alpha = 0.4) +  # Densité avec remplissage bleu
+  geom_rug() +  # Ajout des marques de tapis pour montrer la distribution des résidus
+  labs(title = "Visualisation de la distribution des résidus standardisés (sans atypiques)",
+       subtitle = "Source : INSEE (identifiant 010598624)",
+       x = "Résidus standardisés",
+       y = "Densité",
+       caption = "BUT Science des Données   Auteur: Lesueur Romain") +
+  theme_minimal()+
+  theme(panel.background = element_rect(fill = "white", color = "white"),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, color = "purple"),
+        axis.title.x = element_text(hjust = 0.5),
+        axis.title.y = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0, vjust = 1)) +
+  labs(caption = "BUT Science des Données   Auteur: Lesueur Romain")
+
+# Affichage du graphique
+print(graph12)
+
+
+# ---- GRAPH 13 ----
+
+# Filtrer les données atypiques (outliers)
+filtered_data <- varseason_df[!varseason_df$Outlier, ]
+
+# Créer et personnaliser le Q-Q plot directement
+graph13 <- ggqqplot(filtered_data, "Std_Residuals",
+                    col = "blue3",
+                    title = "Q-Q Plot des résidus standardisés (sans les valeurs atypiques)",
+                    subtitle = "Source : INSEE (identifiant 010598624)",
+                    xlab = "Théoriques Quantiles",
+                    ylab = "Résidus standardisés") +
+  geom_qq(color = "black")+
+  geom_qq_line(color ="red")+
+  
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "white", color = "white"),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, color = "purple"),
+        axis.title.x = element_text(hjust = 0.5),
+        axis.title.y = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0, vjust = 1)) +
+  labs(caption = "BUT Science des Données   Auteur: Lesueur Romain") 
+  
+
+
+# Affichage du graphique personnalisé
+print(graph13)
+
+# ---- GRAPH 14 A FINIR ---- 
+
+# Calculate autocorrelation
+acf_result <- acf(filtered_data$Std_Residuals, lag = 12, plot = FALSE)
+
+# Create a data frame for ggplot
+acf_data <- data.frame(lag = acf_result$lag, acf = acf_result$acf)
+
+# Plot the correlogram with ggplot2
+graph14 <- ggplot(acf_data, aes(x = lag, y = acf)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey") +
+  geom_bar(stat = "identity", fill = "blue3", alpha = 0.7, width = 0.5) +
+  geom_text(aes(label = paste0(round(acf * 100), "%")),
+            vjust = -0.5, color = "black") +
+  labs(title = "Correlogram des Résidus Standardisés",
+       subtitle = "Source : INSEE (identifiant 010598624)",
+       x = "Lags", y = "ACF") +
+  coord_cartesian(ylim = c(-1, 1)) +
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "white", color = "white"),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, color = "purple"),
+    axis.title.x = element_text(hjust = 0.5),
+    axis.title.y = element_text(hjust = 0.5),
+    plot.caption = element_text(hjust = 0, vjust = 1)
+  ) +
+  labs(caption = "BUT Science des Données   Auteur: Lesueur Romain")
+
+print(graph14)
+
+
+# ---- Data.frame ----
+
+
+
+# Convertir les données en objet de série temporelle
+ts_data <- ts(varseason_df$Value, frequency = 12, start = c(2011, 1))
+
+# Ajuster un modèle ARIMA aux données
+model <- auto.arima(ts_data)
+
+# Générer des prévisions
+forecasted_values <- forecast(model, h = 12)
+
+# Créer un data.frame pour les prévisions futures avec des colonnes correspondant à 'fitted_df'
+forecast_dates <- seq.Date(from = max(varseason_df$Date), by = "month", length.out = length(forecasted_values$mean))
+
+forecasts_df <- data.frame(
+  Date = forecast_dates,
+  Fitted = NA,
+  Forecasts = forecasted_values$mean,
+  Lower_80 = forecasted_values$lower[, "80%"],
+  Upper_80 = forecasted_values$upper[, "80%"],
+  Lower_95 = forecasted_values$lower[, "95%"],
+  Upper_95 = forecasted_values$upper[, "95%"]
+)
+
+# ----  GRAPH 15-----
+
+# Créer un graphique combinant les données historiques et les prévisions
+graph15 <- ggplot() +
+  geom_line(data = varseason_df, aes(x = Date, y = Value), color = "black") +
+  geom_line(data = forecasts_df, aes(x = Date, y = Forecasts), color = "red") +
+  geom_ribbon(data = forecasts_df, aes(x = Date, ymin = Lower_95, ymax = Upper_95), fill = "pink", alpha = 0.2) +
+  labs(title = "Visualisation de la chronique et des prévisions",
+       subtitle = "Source : INSEE (identifiant 010598624)",
+       x = "Date",
+       y = "Nuitées en milliers") +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "white", color = "white"),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, color = "purple"),
+        axis.title.x = element_text(hjust = 0.5),
+        axis.title.y = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0, vjust = 1)) +
+  labs(caption = "BUT Science des Données   Auteur: Lesueur Romain")
+
+
+# Afficher le graphique
+print(graph15)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
